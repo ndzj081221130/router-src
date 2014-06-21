@@ -26,8 +26,6 @@ func main() {
 	router.SetupLoggerFromConfig(c)
 	
 	r := router.NewRouter(c)
-	
-//	go r.S
 	 
 	go r.Run()
 	

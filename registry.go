@@ -400,7 +400,9 @@ func (r *Registry) checkAndPrune() {
 func (r *Registry) Lookup(host string,rootTx string) (*Backend, bool) {
 	r.RLock()
 	defer r.RUnlock()
-
+	fmt.Printf("Look up for host %s \n" ,host)
+	
+	
 	x, ok := r.byUri[Uri(host).ToLower()]
 	if !ok {
 		return nil, false
@@ -443,6 +445,7 @@ func (r *Registry) Lookup(host string,rootTx string) (*Backend, bool) {
 		b = x[rand.Intn(len(x))]
 		stats = b.Stats
 		log.Info("in for ondemand")
+		fmt.Printf("in ondemand cycle?")
 	}
 	 
 	 

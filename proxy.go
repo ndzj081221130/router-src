@@ -198,6 +198,7 @@ func (p *Proxy) ServeHTTP(hrw http.ResponseWriter, req *http.Request) {
 	parentName := ""
 	parent_port := ""
 	subName := ""
+	invocationCtx := ""
 	cat  := string(bytes) 
 	var rm reqMessage 
 	u_err := json.Unmarshal(bytes, &rm)
@@ -216,17 +217,18 @@ func (p *Proxy) ServeHTTP(hrw http.ResponseWriter, req *http.Request) {
 		     rootTx = arr[1]
 		     parentTx = arr[2]
 		     
-		     if len(arr) > 5{
+		     if len(arr) > 6{
 		     	parentName = arr[3] // actually , this is current component
 		     	parent_port = arr[4]
 		     	subName = arr[5]
+		     	invocationCtx = arr[6]
 		     }
-		     rm.Params[0] = Param(arr[0])
+		     rm.Params[0] = Param(arr[0])//什么意思？？？
 			 y, err := json.Marshal(rm)
 			 if err != nil {
 			 	rw.Infof("marshal error %s ",err)
 			 }
-		     req.Body = ioutil.NopCloser(strings.NewReader(string(y)) )//.Encode()
+		     req.Body = ioutil.NopCloser(strings.NewReader(string(y)) )// 
 	 
 	}else{
 		rw.Infof("rm.Params == nil %s", rm.Params )
@@ -243,42 +245,49 @@ func (p *Proxy) ServeHTTP(hrw http.ResponseWriter, req *http.Request) {
 		rw.WriteStatus(http.StatusNotFound)
 		return
 	}
-	
-	
-	
-	
+		fmt.Printf("check whether use cachedTxBackends \n")
 	if rootTx != "" {
+	
+		h := hostWithoutPort(req)
+		fmt.Printf("h = %s \n" , h)
 	 	find_key := x.ApplicationId + ":" + rootTx
 	 	if p.CachedTxBackends[find_key] != nil {
 	 		x = p.CachedTxBackends[find_key]
-	 		fmt.Printf("get key from map ,tx = %s " , rootTx)
+	 		fmt.Printf("%s get key:%s from map ,tx = %s\n" ,x.CollectPort, x.ApplicationId, rootTx)
 	 	}else{
 			key := x.ApplicationId + ":" + rootTx
 			p.CachedTxBackends[key] = x 
-			fmt.Printf( "save key to map ,tx = %s  " , rootTx)
+			fmt.Printf( "%s save key:%s to map ,tx = %s  \n",x.CollectPort,x.ApplicationId , rootTx)
 		}
-	}
+
+		fmt.Printf("%v ,%d, %s, blocked false\n   ", x.BackendId ,x.ApplicationId, x.Port)
+		sub_port := x.CollectPort
+		
+		remote := &remoteMessage{
+			RootTx: rootTx,
+			ParentTx: parentTx,
+			ParentPort: parent_port,
+			ParentName: parentName,
+			SubPort: 	sub_port,
+			SubName:	subName,
+			InvocationCtx:	invocationCtx,
+		} 
+		
+		cachedTxes := p.CachedBackendTxes[x.PrivateInstanceId]  
+		p.CachedBackendTxes[x.PrivateInstanceId] = append(cachedTxes , remote)
+		
+//		fmt.Printf("after add \n")
+//		 
+//			
+//		for  x,y := range p.CachedBackendTxes {
+//			for j := 0 ; j < len (y); j++ {
+//				fmt.Printf("i:%s,j:%d,remote:%s.\n",x,j,y[j].RootTx)
+//			}
+//		}
+	}else{
 	
-	
-	fmt.Printf("%v ,%d, %s, blocked false\n   ", x.BackendId ,x.ApplicationId, x.Port)
-	sub_port := x.CollectPort
-	
-	remote := &remoteMessage{
-		RootTx: rootTx,
-		ParentTx: parentTx,
-		ParentPort: parent_port,
-		ParentName: parentName,
-		SubPort: 	sub_port,
-		SubName:	subName,
+		fmt.Printf("rootTx == whitespace \n")
 	} 
-	
-	cachedTxes := p.CachedBackendTxes[x.PrivateInstanceId]  
-	p.CachedBackendTxes[x.PrivateInstanceId] = append(cachedTxes , remote)
-	
-//	if cachedTxes == nil {
-//		p.CachedBackendTxes = make(map[string][])
-//	} 
-	//p.Router.SendRemoteMessage(rootTx,parentTx,parent_port,parentName,sub_port,subName)
 	
 	rw.Set("Backend", x.ToLogData(	))
 
@@ -344,8 +353,7 @@ func (p *Proxy) ServeHTTP(hrw http.ResponseWriter, req *http.Request) {
 	}
 
 	needSticky := false
-	//fmt.Printf(needSticky)
-	//rw.Infof("need stick? ",  needSticky )
+	 
 	//这里是判断response中，cookie中是否有jsessionid
 	for _, v := range res.Cookies() {// here we get res.Cookies(), if exists v[i].name = StickyCookieKey
 		zlog.Info(v.Name)//基于Cookie的web应用，会将数据存成<key,value>
@@ -357,16 +365,14 @@ func (p *Proxy) ServeHTTP(hrw http.ResponseWriter, req *http.Request) {
 		}
 	}
 	 
-	//fmt.Printf( needSticky )
-	//zlog.Infof("need? %s ",needSticky)
+	 
 	if needSticky && x.PrivateInstanceId != "" {
 		cookie := &http.Cookie{ // here we got http cookie which has sessionid
 			Name:  VcapCookieId,
 			Value: x.PrivateInstanceId,
 			Path:  "/",
 		} //
-		//rw.Infof("here we got sticky %s " , cookie)
-		//zlog.Infof("here")
+		 
 		http.SetCookie(rw, cookie) // set httpCookie 只在发现有sticky session时，才set Cookie
 		// http session,第一次生成jsessionid时，会在返回头部加上cookie
 	}
@@ -385,18 +391,29 @@ func (p *Proxy) ServeHTTP(hrw http.ResponseWriter, req *http.Request) {
 func (p * Proxy) RootTxExist(instance_id  string) *remoteMessage {
 	remotes := p.CachedBackendTxes[instance_id]
 	if remotes == nil {
-		fmt.Printf("no cached tx for %s " , instance_id)
+		fmt.Printf("no cached tx for %s \n" , instance_id)
 		return nil
 	}else{
 		r := remotes[0]
 		
 		if len(remotes) == 1 {
-			fmt.Printf("only one cached tx for %s " , instance_id)
+			fmt.Printf("only one cached tx for %s \n" , instance_id)
 			delete(p.CachedBackendTxes , instance_id)	
 		}else{
-			fmt.Printf("more than one cached tx for %s ", instance_id)
+			fmt.Printf("more than one cached tx for %s \n", instance_id)
 			p.CachedBackendTxes[instance_id] = remotes[1:len(remotes)] 
 		}
+		
+//		fmt.Printf("after delete \n")
+//		 
+//			
+//		for  x,y := range p.CachedBackendTxes {
+//			for j := 0 ; j < len (y); j++ {
+//				fmt.Printf("i:%s,j:%d,remote:%s.\n",x,j,y[j].RootTx)
+//			}
+//		}
+		
+		
 		return r
 	}
 	

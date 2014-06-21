@@ -572,7 +572,7 @@ func (c *conn) serve() {
 	for {
 		
 		req, w, err := c.readRequest()
-		fmt.Printf(" a new conn ? \n")
+		//fmt.Printf(" a new conn ? \n")
 		if err != nil {
 			msg := "400 Bad Request"
 			if err == errTooLarge {
@@ -690,7 +690,7 @@ func (srv *Server) Serve(l net.Listener) error {
 				time.Sleep(tempDelay)
 				continue
 			}else{
-				fmt.Printf("what > err")
+				//fmt.Printf("what > err")
 			}
 			return e
 		}

@@ -55,31 +55,35 @@ func EchoServer(conn net.Conn , proxy *Proxy) {
         switch err {
             case nil:
             	msg := string(buf[0:n])
-            	fmt.Printf("echo server : %s" ,msg)
+//            	fmt.Printf("echo server : %s \n" ,msg)
             	 
 				var tm TxMessage
 
 				err := json.Unmarshal(buf[0:n], &tm)
 				if err != nil {
+					fmt.Printf("unmarshal error \n")
 					lm := fmt.Sprintf("---%s: Error unmarshalling JSON: %s", "txMessage", err)
 					log.Log(steno.LOG_WARN, lm, map[string]interface{}{"payload": string(msg)})
 					continue
 				}
 				remote := proxy.RootTxExist(tm.InstanceId)
 				if remote == nil {
-					fmt.Printf("remote nil ")
+//					fmt.Printf("remote nil \n ")
                 	conn.Write( buf[0:n] )
-                	continue
+                	return
                 }else {
-                	fmt.Printf("hahaha, has tx for %s " , tm.InstanceId)
+//                	fmt.Printf("hahaha, has tx for %s \n" , tm.InstanceId)
                 	new_b,marshal_err := json.Marshal(remote)
                 	if marshal_err != nil {
                 		lm := fmt.Sprintf("---%s: Error unmarshalling JSON: %s", "txMessage", err)
 						log.Log(steno.LOG_WARN, lm, map[string]interface{}{"payload": string(msg)})
+//						fmt.Printf("marshal error ?\n")
 						conn.Write( buf[0:n] )
-						continue
+						return
                 	}else{
+//                		fmt.Printf("marshal succ %s \n" , string(new_b))
                 		conn.Write(new_b)
+                		return
                 	}
                 }
             case io.EOF:
@@ -262,11 +266,12 @@ func (r *Router) SendStartMessage() {
 
 type remoteMessage struct {
 	RootTx string        		`json:"RootTx"`
-	ParentTx string            `json:"ParentTx"`
+	ParentTx string             `json:"ParentTx"`
 	ParentPort string			`json:"ParentPort"`
 	ParentName string			`json:"ParentName"`
  	SubPort 	string			`json:"SubPort"`
 	SubName		string			`json:"SubName"` 
+	InvocationCtx string		`json:"InvocationCtx"`
 }
 
 type TxMessage struct {
@@ -275,28 +280,7 @@ type TxMessage struct {
 }
 
 
-func (r* Router) SendRemoteMessage(tx string, parentTx string,port string , name string,subPort string,subName string){
-//这个 
-	host, err := vcap.LocalIP()
-	log.Infof("host = %s , " , host)
-	if err != nil {
-		panic(err)
-	}
-	q := &remoteMessage{
-		RootTx: tx,
-		ParentTx: parentTx,
-		ParentPort: port,
-		ParentName: name,
-		SubPort: 	subPort,
-		SubName:	subName,
-	} 
-
-	
-	b,err := json.Marshal(q) 
-	
-	log.Infof("remote message b = %s :" , b)
-	r.natsClient.Publish("router.remote",b)
-}
+ 
 
 func (r *Router) Run() {
 	var err error
@@ -313,17 +297,13 @@ func (r *Router) Run() {
 	fmt.Printf("available cpu =  %d \n" , runtime.NumCPU() )
 	//runtime.GOMAXPROCS(2)
 	
-
-	
-	
-	
 	// Wait for one start message send interval, such that the router's registry
 	// can be populated before serving requests.
 	if r.config.PublishStartMessageInterval != 0 {
 		log.Infof("Waiting %s before listening...", r.config.PublishStartMessageInterval)
 		time.Sleep(r.config.PublishStartMessageInterval)
 	}
-	fmt.Printf(":%d", r.config.Port)
+	fmt.Printf(":%d \n", r.config.Port)
 	l, err := net.Listen("tcp", fmt.Sprintf(":%d", r.config.Port))
 	if err != nil {
 		log.Fatalf("net.Listen: %s", err)
