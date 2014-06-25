@@ -250,12 +250,12 @@ func (p *Proxy) ServeHTTP(hrw http.ResponseWriter, req *http.Request) {
 	
 		h := hostWithoutPort(req)
 		fmt.Printf("h = %s \n" , h)
-	 	find_key := x.ApplicationId + ":" + rootTx
+	 	find_key := h + ":" + rootTx
 	 	if p.CachedTxBackends[find_key] != nil {
 	 		x = p.CachedTxBackends[find_key]
-	 		fmt.Printf("%s get key:%s from map ,tx = %s\n" ,x.CollectPort, x.ApplicationId, rootTx)
+	 		fmt.Printf("%s get key: app_id = %s from map ,tx = %s\n" ,x.CollectPort, x.ApplicationId, rootTx)
 	 	}else{
-			key := x.ApplicationId + ":" + rootTx
+			key := h + ":" + rootTx
 			p.CachedTxBackends[key] = x 
 			fmt.Printf( "%s save key:%s to map ,tx = %s  \n",x.CollectPort,x.ApplicationId , rootTx)
 		}
